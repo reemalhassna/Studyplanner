@@ -9,6 +9,8 @@ import com.example.lecture8.ui.theme.Lecture8Theme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        createReminderChannel(this)
+        scheduleDailyReminder(this)
         enableEdgeToEdge()
         setContent {
             Lecture8Theme {

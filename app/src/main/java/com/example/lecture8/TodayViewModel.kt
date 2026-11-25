@@ -1,39 +1,57 @@
 package com.example.lecture8
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-class TodayViewModel : ViewModel() {
-    private val repository = FakeTaskRepository()
+class TodayViewModel(application: Application) : AndroidViewModel(application) {
+    private val repository = TaskRepository(
+        StudyDatabase.getDatabase(application).studyTaskDao()
+    )
+
     private val _uiState = MutableStateFlow(TodayUiState())
     val uiState: StateFlow<TodayUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            val tasks = repository.loadTodayTasks()
-            _uiState.update {
-                it.copy(isLoading = false, tasks = tasks)
+            repository.allTasks.collect { tasks ->
+                _uiState.update {
+                    it.copy(isLoading = false, tasks = tasks)
+                }
             }
+        }
+    }
+
+    fun onAddTask(title: String) {
+        if (title.isBlank()) return
+        viewModelScope.launch {
+            repository.add(title.trim(), "Mobile Apps")
+            _uiState.update { it.copy(message = "Task added") }
         }
     }
 
     fun onTaskCheckedChange(task: StudyTask, done: Boolean) {
         viewModelScope.launch {
-            repository.setDone(task.id, done)
-            _uiState.update { state ->
-                state.copy(
-                    tasks = state.tasks.map {
-                        if (it.id == task.id) it.copy(isDone = done)
-                        else it
-                    },
-                    message = if (done) "Marked as done" else null
-                )
-            }
+            repository.setDone(task, done)
+            if (done) _uiState.update { it.copy(message = "Marked as done") }
+        }
+    }
+
+    fun onRemindMe() {
+        val request = OneTimeWorkRequestBuilder<ReminderWorker>()
+            .setInitialDelay(10, TimeUnit.SECONDS)
+            .build()
+        WorkManager.getInstance(getApplication()).enqueue(request)
+        _uiState.update {
+            it.copy(message = "Reminder in 10 seconds. Close the app!")
         }
     }
 
